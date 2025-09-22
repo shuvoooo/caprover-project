@@ -1,0 +1,188 @@
+captainVersion: 4
+
+services:
+  $$cap_appname-cache:
+    image: memcached:1.6-alpine
+    caproverExtra:
+      notExposeAsWebApp: "true"
+
+  # One‑time DB preparation on first deploy (runs migrations/seed against your external DB).
+  # After first successful run, scale this service to 0 in CapRover to avoid reruns.
+  $$cap_appname-seeder:
+    image: openproject/openproject:$$cap_op_version
+    command: "./docker/prod/seeder"
+    environment:
+      OPENPROJECT_HTTPS: $$cap_openproject_https
+      OPENPROJECT_HOST__NAME: $$cap_openproject_host
+      OPENPROJECT_HSTS: $$cap_openproject_hsts
+      RAILS_CACHE_STORE: memcache
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: srv-captain--$$cap_appname-cache:11211
+      OPENPROJECT_RAILS__RELATIVE__URL__ROOT: $$cap_relative_url_root
+      DATABASE_URL: "postgres://$$cap_db_user:$$cap_db_pass@$$cap_db_host:$$cap_db_port/$$cap_db_name?$$cap_db_params"
+      RAILS_MIN_THREADS: $$cap_rails_min_threads
+      RAILS_MAX_THREADS: $$cap_rails_max_threads
+      IMAP_ENABLED: $$cap_imap_enabled
+    volumes:
+      - $$cap_appname-opdata:/var/openproject/assets
+    depends_on:
+      - $$cap_appname-cache
+    caproverExtra:
+      notExposeAsWebApp: "true"
+
+  $$cap_appname-web:
+    image: openproject/openproject:$$cap_op_version
+    command: "./docker/prod/web"
+    environment:
+      OPENPROJECT_HTTPS: $$cap_openproject_https
+      OPENPROJECT_HOST__NAME: $$cap_openproject_host
+      OPENPROJECT_HSTS: $$cap_openproject_hsts
+      RAILS_CACHE_STORE: memcache
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: srv-captain--$$cap_appname-cache:11211
+      OPENPROJECT_RAILS__RELATIVE__URL__ROOT: $$cap_relative_url_root
+      DATABASE_URL: "postgres://$$cap_db_user:$$cap_db_pass@$$cap_db_host:$$cap_db_port/$$cap_db_name?$$cap_db_params"
+      RAILS_MIN_THREADS: $$cap_rails_min_threads
+      RAILS_MAX_THREADS: $$cap_rails_max_threads
+      IMAP_ENABLED: $$cap_imap_enabled
+    volumes:
+      - $$cap_appname-opdata:/var/openproject/assets
+    depends_on:
+      - $$cap_appname-cache
+      - $$cap_appname-seeder
+    caproverExtra:
+      containerHttpPort: "8080"
+      websocketSupport: "true"
+
+  $$cap_appname-worker:
+    image: openproject/openproject:$$cap_op_version
+    command: "./docker/prod/worker"
+    environment:
+      OPENPROJECT_HTTPS: $$cap_openproject_https
+      OPENPROJECT_HOST__NAME: $$cap_openproject_host
+      OPENPROJECT_HSTS: $$cap_openproject_hsts
+      RAILS_CACHE_STORE: memcache
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: srv-captain--$$cap_appname-cache:11211
+      OPENPROJECT_RAILS__RELATIVE__URL__ROOT: $$cap_relative_url_root
+      DATABASE_URL: "postgres://$$cap_db_user:$$cap_db_pass@$$cap_db_host:$$cap_db_port/$$cap_db_name?$$cap_db_params"
+      RAILS_MIN_THREADS: $$cap_rails_min_threads
+      RAILS_MAX_THREADS: $$cap_rails_max_threads
+      IMAP_ENABLED: $$cap_imap_enabled
+    volumes:
+      - $$cap_appname-opdata:/var/openproject/assets
+    depends_on:
+      - $$cap_appname-cache
+    caproverExtra:
+      notExposeAsWebApp: "true"
+
+  $$cap_appname-cron:
+    image: openproject/openproject:$$cap_op_version
+    command: "./docker/prod/cron"
+    environment:
+      OPENPROJECT_HTTPS: $$cap_openproject_https
+      OPENPROJECT_HOST__NAME: $$cap_openproject_host
+      OPENPROJECT_HSTS: $$cap_openproject_hsts
+      RAILS_CACHE_STORE: memcache
+      OPENPROJECT_CACHE__MEMCACHE__SERVER: srv-captain--$$cap_appname-cache:11211
+      OPENPROJECT_RAILS__RELATIVE__URL__ROOT: $$cap_relative_url_root
+      DATABASE_URL: "postgres://$$cap_db_user:$$cap_db_pass@$$cap_db_host:$$cap_db_port/$$cap_db_name?$$cap_db_params"
+      RAILS_MIN_THREADS: $$cap_rails_min_threads
+      RAILS_MAX_THREADS: $$cap_rails_max_threads
+      IMAP_ENABLED: $$cap_imap_enabled
+    volumes:
+      - $$cap_appname-opdata:/var/openproject/assets
+    depends_on:
+      - $$cap_appname-cache
+    caproverExtra:
+      notExposeAsWebApp: "true"
+
+caproverOneClickApp:
+  variables:
+    - id: $$cap_op_version
+      label: OpenProject image tag
+      defaultValue: "16-slim"
+      description: Tag from Docker Hub (openproject/openproject).
+      validRegex: /^([^\s^\/])+$/
+
+    - id: $$cap_openproject_host
+      label: Public hostname (no port)
+      defaultValue: "$$cap_appname.$$cap_root_domain"
+      description: e.g. projects.example.com
+      validRegex: /.+/
+
+    - id: $$cap_openproject_https
+      label: Tell OpenProject it’s served via HTTPS (behind CapRover)
+      defaultValue: "true"
+      validRegex: /^(true|false)$/
+
+    - id: $$cap_openproject_hsts
+      label: Enable HSTS
+      defaultValue: "true"
+      validRegex: /^(true|false)$/
+
+    - id: $$cap_relative_url_root
+      label: Relative URL root (optional, e.g. /openproject)
+      defaultValue: ""
+      validRegex: /^.*$/
+
+    # --- External Postgres connection ---
+    - id: $$cap_db_host
+      label: DB host (DNS or IP)
+      defaultValue: "db.example.com"
+      validRegex: /.+/
+
+    - id: $$cap_db_port
+      label: DB port
+      defaultValue: "5432"
+      validRegex: /^[0-9]+$/
+
+    - id: $$cap_db_name
+      label: DB name
+      defaultValue: "openproject"
+      validRegex: /.+/
+
+    - id: $$cap_db_user
+      label: DB user
+      defaultValue: "openproject"
+      validRegex: /.+/
+
+    - id: $$cap_db_pass
+      label: DB password (URL-encode if it has special characters)
+      defaultValue: ""
+      validRegex: /^.*$/
+
+    - id: $$cap_db_params
+      label: DB URL params
+      defaultValue: "pool=20&encoding=unicode&reconnect=true"
+      description: 'Add &sslmode=require if your DB enforces TLS'
+      validRegex: /^.*$/
+
+    # --- Rails thread tuning ---
+    - id: $$cap_rails_min_threads
+      label: RAILS_MIN_THREADS
+      defaultValue: "4"
+      validRegex: /^[0-9]+$/
+
+    - id: $$cap_rails_max_threads
+      label: RAILS_MAX_THREADS
+      defaultValue: "16"
+      validRegex: /^[0-9]+$/
+
+    - id: $$cap_imap_enabled
+      label: Enable IMAP incoming mail (extra IMAP_* envs needed)
+      defaultValue: "false"
+      validRegex: /^(true|false)$/
+
+  instructions:
+    start: |-
+      This deploys OpenProject on CapRover using YOUR external PostgreSQL.
+      - Make sure your DB allows inbound connections from this CapRover node IP.
+      - Create the database and user ahead of time.
+      - If your password contains special chars, URL‑encode it inside the DATABASE_URL (e.g., %40 for @).
+    end: |-
+      After first start, the "seeder" runs migrations/seed against your DB.
+      Once everything is up, scale the **seeder** service to 0 in CapRover to prevent reruns.
+      Assign a domain to the web service and enable HTTPS.
+
+  displayName: OpenProject (External Postgres)
+  isOfficial: false
+  description: OpenProject on CapRover with your own Postgres (no internal DB), plus Memcached, Worker, Cron.
+  documentation: Uses DATABASE_URL override as documented by OpenProject.
